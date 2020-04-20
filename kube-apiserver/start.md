@@ -314,10 +314,264 @@ return prepared.Run(stopCh)
 }
 ```
 
+**首先调用CreateServerChain函数，该函数目的是生成server结构体，类型为APIAggregator。**
+APIAggregator定义在k8s.io/kube-aggregator/pkg/apiserver,staging在
+> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
+
+```
+// APIAggregator contains state for a Kubernetes cluster master/api server.
+type APIAggregator struct {
+	GenericAPIServer *genericapiserver.GenericAPIServer
+
+	delegateHandler http.Handler
+
+	// proxyClientCert/Key are the client cert used to identify this proxy. Backing APIServices use
+	// this to confirm the proxy's identity
+	proxyClientCert []byte
+	proxyClientKey  []byte
+	proxyTransport  *http.Transport
+
+	// proxyHandlers are the proxy handlers that are currently registered, keyed by apiservice.name
+	proxyHandlers map[string]*proxyHandler
+	// handledGroups are the groups that already have routes
+	handledGroups sets.String
+
+	// lister is used to add group handling for /apis/<group> aggregator lookups based on
+	// controller state
+	lister listers.APIServiceLister
+
+	// provided for easier embedding
+	APIRegistrationInformers informers.SharedInformerFactory
+
+	// Information needed to determine routing for the aggregator
+	serviceResolver ServiceResolver
+
+	// Enable swagger and/or OpenAPI if these configs are non-nil.
+	openAPIConfig *openapicommon.Config
+
+	// openAPIAggregationController downloads and merges OpenAPI specs.
+	openAPIAggregationController *openapicontroller.AggregationController
+
+	// egressSelector selects the proper egress dialer to communicate with the custom apiserver
+	// overwrites proxyTransport dialer if not nil
+	egressSelector *egressselector.EgressSelector
+}
+```
+
+> cmd/kube-apiserver/app/server.go
+```
+// CreateServerChain creates the apiservers connected via delegation.
+func CreateServerChain(completedOptions completedServerRunOptions, stopCh <-chan struct{}) (*aggregatorapiserver.APIAggregator, error) {
+	nodeTunneler, proxyTransport, err := CreateNodeDialer(completedOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeAPIServerConfig, insecureServingInfo, serviceResolver, pluginInitializer, err := CreateKubeAPIServerConfig(completedOptions, nodeTunneler, proxyTransport)
+	if err != nil {
+		return nil, err
+	}
+
+	// If additional API servers are added, they should be gated.
+	apiExtensionsConfig, err := createAPIExtensionsConfig(*kubeAPIServerConfig.GenericConfig, kubeAPIServerConfig.ExtraConfig.VersionedInformers, pluginInitializer, completedOptions.ServerRunOptions, completedOptions.MasterCount,
+		serviceResolver, webhook.NewDefaultAuthenticationInfoResolverWrapper(proxyTransport, kubeAPIServerConfig.GenericConfig.EgressSelector, kubeAPIServerConfig.GenericConfig.LoopbackClientConfig))
+	if err != nil {
+		return nil, err
+	}
+	apiExtensionsServer, err := createAPIExtensionsServer(apiExtensionsConfig, genericapiserver.NewEmptyDelegate())
+	if err != nil {
+		return nil, err
+	}
+
+	kubeAPIServer, err := CreateKubeAPIServer(kubeAPIServerConfig, apiExtensionsServer.GenericAPIServer)
+	if err != nil {
+		return nil, err
+	}
+
+	// aggregator comes last in the chain
+	aggregatorConfig, err := createAggregatorConfig(*kubeAPIServerConfig.GenericConfig, completedOptions.ServerRunOptions, kubeAPIServerConfig.ExtraConfig.VersionedInformers, serviceResolver, proxyTransport, pluginInitializer)
+	if err != nil {
+		return nil, err
+	}
+	aggregatorServer, err := createAggregatorServer(aggregatorConfig, kubeAPIServer.GenericAPIServer, apiExtensionsServer.Informers)
+	if err != nil {
+		// we don't need special handling for innerStopCh because the aggregator server doesn't create any go routines
+		return nil, err
+	}
+
+	if insecureServingInfo != nil {
+		insecureHandlerChain := kubeserver.BuildInsecureHandlerChain(aggregatorServer.GenericAPIServer.UnprotectedHandler(), kubeAPIServerConfig.GenericConfig)
+		if err := insecureServingInfo.Serve(insecureHandlerChain, kubeAPIServerConfig.GenericConfig.RequestTimeout, stopCh); err != nil {
+			return nil, err
+		}
+	}
+
+	return aggregatorServer, nil
+}
+```
 
 
+生成server（APIAggregator类型）后，调用PrepareRun（)方法生成preparedAPIAggregator
+preparedAPIAggregator定义如下：
+> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
+```
+// preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+type preparedAPIAggregator struct {
+	*APIAggregator
+	runnable runnable
+}
+```
+```
+type runnable interface {
+	Run(stopCh <-chan struct{}) error
+}
+```
+实际上是在APIAggregator基础上，包装了runable类型的interface .
+该interface 有Run方法。
 
 
+> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
+```
+// PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec and calling
+// the generic PrepareRun.
+func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
+	// add post start hook before generic PrepareRun in order to be before /healthz installation
+	if s.openAPIConfig != nil {
+		s.GenericAPIServer.AddPostStartHookOrDie("apiservice-openapi-controller", func(context genericapiserver.PostStartHookContext) error {
+			go s.openAPIAggregationController.Run(context.StopCh)
+			return nil
+		})
+	}
+
+	prepared := s.GenericAPIServer.PrepareRun()
+
+	// delay OpenAPI setup until the delegate had a chance to setup their OpenAPI handlers
+	if s.openAPIConfig != nil {
+		specDownloader := openapiaggregator.NewDownloader()
+		openAPIAggregator, err := openapiaggregator.BuildAndRegisterAggregator(
+			&specDownloader,
+			s.GenericAPIServer.NextDelegate(),
+			s.GenericAPIServer.Handler.GoRestfulContainer.RegisteredWebServices(),
+			s.openAPIConfig,
+			s.GenericAPIServer.Handler.NonGoRestfulMux)
+		if err != nil {
+			return preparedAPIAggregator{}, err
+		}
+		s.openAPIAggregationController = openapicontroller.NewAggregationController(&specDownloader, openAPIAggregator)
+	}
+
+	return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil
+}
+```
+
+从prepared := s.GenericAPIServer.PrepareRun()及return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil发现
+**preparedAPIAggregator中runnable为prepared,实际为 APIAggregator.GenericAPIServer.PrepareRun()函数返回值,是一个结构体，类型为*GenericAPIServer**
+**runnable才是真命天子**
+结构体定义及PrepareRun函数如下
+> staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go
+```
+// preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+type preparedGenericAPIServer struct {
+	*GenericAPIServer
+}
+```
+```
+// PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
+func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
+	s.delegationTarget.PrepareRun()
+
+	if s.openAPIConfig != nil {
+		s.OpenAPIVersionedService, s.StaticOpenAPISpec = routes.OpenAPI{
+			Config: s.openAPIConfig,
+		}.Install(s.Handler.GoRestfulContainer, s.Handler.NonGoRestfulMux)
+	}
+
+	s.installHealthz()
+	s.installLivez()
+	err := s.addReadyzShutdownCheck(s.readinessStopCh)
+	if err != nil {
+		klog.Errorf("Failed to install readyz shutdown check %s", err)
+	}
+	s.installReadyz()
+
+	// Register audit backend preShutdownHook.
+	if s.AuditBackend != nil {
+		err := s.AddPreShutdownHook("audit-backend", func() error {
+			s.AuditBackend.Shutdown()
+			return nil
+		})
+		if err != nil {
+			klog.Errorf("Failed to add pre-shutdown hook for audit-backend %s", err)
+		}
+	}
+
+	return preparedGenericAPIServer{s}
+}
+```
+**可以发现，prepared, err := server.PrepareRun()  最终通过处理APIAggreator 生成 preparedGenericAPIServer，是GenericAPIServe的包装**
+
+
+preparedAPIAggregator生成后，调用preparedAPIAggregator的Run()方法
+```
+func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
+	return s.runnable.Run(stopCh)
+}
+```
+实际返回preparedAPIAggregator.runmable的Run方法,即preparedGenericAPIServer的run方法
+>  staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go
+```
+// Run spawns the secure http server. It only returns if stopCh is closed
+// or the secure port cannot be listened on initially.
+func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
+	delayedStopCh := make(chan struct{})
+
+	go func() {
+		defer close(delayedStopCh)
+
+		<-stopCh
+
+		// As soon as shutdown is initiated, /readyz should start returning failure.
+		// This gives the load balancer a window defined by ShutdownDelayDuration to detect that /readyz is red
+		// and stop sending traffic to this server.
+		close(s.readinessStopCh)
+
+		time.Sleep(s.ShutdownDelayDuration)
+	}()
+
+	// close socket after delayed stopCh
+	err := s.NonBlockingRun(delayedStopCh)
+	if err != nil {
+		return err
+	}
+
+	<-stopCh
+
+	// run shutdown hooks directly. This includes deregistering from the kubernetes endpoint in case of kube-apiserver.
+	err = s.RunPreShutdownHooks()
+	if err != nil {
+		return err
+	}
+
+	// wait for the delayed stopCh before closing the handler chain (it rejects everything after Wait has been called).
+	<-delayedStopCh
+
+	// Wait for all requests to finish, which are bounded by the RequestTimeout variable.
+	s.HandlerChainWaitGroup.Wait()
+
+	return nil
+}
+```
+
+
+server, err := CreateServerChain(completeOptions, stopCh)
+作用为是生成server结构体，类型为APIAggregator
+
+prepared, err := server.PrepareRun()
+作用为处理APIAggreator 生成 preparedAPIAggreator 结构体，该结构体是对APIAggreator的包装，增加了runable (GenericAPIServer)。
+最终执行了GenericAPIServer的PrepareRun方法。（确保PrepareRun能够在下面的run前执行）
+
+return prepared.Run(stopCh)
+作用为执行preparedGenericAPIServer的run方法（preparedGenericAPIServer为GenericAPIServer的包装）
 
 
 
