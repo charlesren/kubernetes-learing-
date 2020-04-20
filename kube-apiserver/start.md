@@ -1,10 +1,12 @@
 # kube-apiserver learning
 
-基于1.18版本。源码：&lt;https://github.com/kubernetes/kubernetes&gt;
+基于1.18版本。源码：<https://github.com/kubernetes/kubernetes>
+
+
 
 #### 启动入口在
 
-&gt; cmd/kube-apiserver/apiserver.go
+> cmd/kube-apiserver/apiserver.go
 
 ```
 func main() {
@@ -29,18 +31,18 @@ func main() {
 
 #### command是怎么被创建的呢?
 
-&gt; cmd/kube-apiserver/app/server.go
+> cmd/kube-apiserver/app/server.go
 
 ```
 // NewAPIServerCommand creates a *cobra.Command object with default parameters
 func NewAPIServerCommand() *cobra.Command {
 	s := options.NewServerRunOptions()
 	cmd := &cobra.Command{
-		Use: &quot;kube-apiserver&quot;,
+		Use: "kube-apiserver",
 		Long: `The Kubernetes API server validates and configures data
 for the api objects which include pods, services, replicationcontrollers, and
 others. The API Server services REST operations and provides the frontend to the
-cluster&#39;s shared state through which all other components interact.`,
+cluster's shared state through which all other components interact.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verflag.PrintAndExitIfRequested()
 			utilflag.PrintFlags(cmd.Flags())
@@ -62,14 +64,14 @@ cluster&#39;s shared state through which all other components interact.`,
 
 	fs := cmd.Flags()
 	namedFlagSets := s.Flags()
-	verflag.AddFlags(namedFlagSets.FlagSet(&quot;global&quot;))
-	globalflag.AddGlobalFlags(namedFlagSets.FlagSet(&quot;global&quot;), cmd.Name())
-	options.AddCustomGlobalFlags(namedFlagSets.FlagSet(&quot;generic&quot;))
+	verflag.AddFlags(namedFlagSets.FlagSet("global"))
+	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
+	options.AddCustomGlobalFlags(namedFlagSets.FlagSet("generic"))
 	for _, f := range namedFlagSets.FlagSets {
 		fs.AddFlagSet(f)
 	}
 
-	usageFmt := &quot;Usage:\n  %s\n&quot;
+	usageFmt := "Usage:\n  %s\n"
 	cols, _, _ := term.TerminalSize(cmd.OutOrStdout())
 	cmd.SetUsageFunc(func(cmd *cobra.Command) error {
 		fmt.Fprintf(cmd.OutOrStderr(), usageFmt, cmd.UseLine())
@@ -77,7 +79,7 @@ cluster&#39;s shared state through which all other components interact.`,
 		return nil
 	})
 	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(cmd.OutOrStdout(), &quot;%s\n\n&quot;+usageFmt, cmd.Long, cmd.UseLine())
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\n\n"+usageFmt, cmd.Long, cmd.UseLine())
 		cliflag.PrintSections(cmd.OutOrStdout(), namedFlagSets, cols)
 	})
 
@@ -91,7 +93,7 @@ run函数加载completedOptions及genericapiserver.SetupSignalHandler()参数
 
 ##### completedOptions生成过程
 
-&gt; cmd/kube-apiserver/app/options/options.go
+> cmd/kube-apiserver/app/options/options.go
 
 ```
 // ServerRunOptions runs a kubernetes api server.
@@ -146,7 +148,7 @@ options.NewServerRunOptions比较简单，只是用默认参数创建了一个�
 
 complete函数设置默认的ServerRunOptions，必须在kube-apiserve flags处理后调用。
 
-&gt; cmd/kube-apiserver/app/server.go
+> cmd/kube-apiserver/app/server.go
 
 ```
 // Complete set default ServerRunOptions.
@@ -170,64 +172,64 @@ func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
 	s.PrimaryServiceClusterIPRange = primaryServiceIPRange
 	s.SecondaryServiceClusterIPRange = secondaryServiceIPRange
 
-	if err := s.SecureServing.MaybeDefaultWithSelfSignedCerts(s.GenericServerRunOptions.AdvertiseAddress.String(), []string{&quot;kubernetes.default.svc&quot;, &quot;kubernetes.default&quot;, &quot;kubernetes&quot;}, []net.IP{apiServerServiceIP}); err != nil {
-		return options, fmt.Errorf(&quot;error creating self-signed certificates: %v&quot;, err)
+	if err := s.SecureServing.MaybeDefaultWithSelfSignedCerts(s.GenericServerRunOptions.AdvertiseAddress.String(), []string{"kubernetes.default.svc", "kubernetes.default", "kubernetes"}, []net.IP{apiServerServiceIP}); err != nil {
+		return options, fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
 
 	if len(s.GenericServerRunOptions.ExternalHost) == 0 {
-		if len(s.GenericServerRunOptions.AdvertiseAddress) &gt; 0 {
+		if len(s.GenericServerRunOptions.AdvertiseAddress) > 0 {
 			s.GenericServerRunOptions.ExternalHost = s.GenericServerRunOptions.AdvertiseAddress.String()
 		} else {
 			if hostname, err := os.Hostname(); err == nil {
 				s.GenericServerRunOptions.ExternalHost = hostname
 			} else {
-				return options, fmt.Errorf(&quot;error finding host name: %v&quot;, err)
+				return options, fmt.Errorf("error finding host name: %v", err)
 			}
 		}
-		klog.Infof(&quot;external host was not specified, using %v&quot;, s.GenericServerRunOptions.ExternalHost)
+		klog.Infof("external host was not specified, using %v", s.GenericServerRunOptions.ExternalHost)
 	}
 
 	s.Authentication.ApplyAuthorization(s.Authorization)
 
-	// Use (ServiceAccountSigningKeyFile != &quot;&quot;) as a proxy to the user enabling
+	// Use (ServiceAccountSigningKeyFile != "") as a proxy to the user enabling
 	// TokenRequest functionality. This defaulting was convenient, but messed up
 	// a lot of people when they rotated their serving cert with no idea it was
 	// connected to their service account keys. We are taking this opportunity to
 	// remove this problematic defaulting.
-	if s.ServiceAccountSigningKeyFile == &quot;&quot; {
+	if s.ServiceAccountSigningKeyFile == "" {
 		// Default to the private server key for service account token signing
-		if len(s.Authentication.ServiceAccounts.KeyFiles) == 0 && s.SecureServing.ServerCert.CertKey.KeyFile != &quot;&quot; {
+		if len(s.Authentication.ServiceAccounts.KeyFiles) == 0 && s.SecureServing.ServerCert.CertKey.KeyFile != "" {
 			if kubeauthenticator.IsValidServiceAccountKeyFile(s.SecureServing.ServerCert.CertKey.KeyFile) {
 				s.Authentication.ServiceAccounts.KeyFiles = []string{s.SecureServing.ServerCert.CertKey.KeyFile}
 			} else {
-				klog.Warning(&quot;No TLS key provided, service account token authentication disabled&quot;)
+				klog.Warning("No TLS key provided, service account token authentication disabled")
 			}
 		}
 	}
 
-	if s.ServiceAccountSigningKeyFile != &quot;&quot; && s.Authentication.ServiceAccounts.Issuer != &quot;&quot; {
+	if s.ServiceAccountSigningKeyFile != "" && s.Authentication.ServiceAccounts.Issuer != "" {
 		sk, err := keyutil.PrivateKeyFromFile(s.ServiceAccountSigningKeyFile)
 		if err != nil {
-			return options, fmt.Errorf(&quot;failed to parse service-account-issuer-key-file: %v&quot;, err)
+			return options, fmt.Errorf("failed to parse service-account-issuer-key-file: %v", err)
 		}
 		if s.Authentication.ServiceAccounts.MaxExpiration != 0 {
 			lowBound := time.Hour
-			upBound := time.Duration(1&lt;&lt;32) * time.Second
-			if s.Authentication.ServiceAccounts.MaxExpiration &lt; lowBound ||
-				s.Authentication.ServiceAccounts.MaxExpiration &gt; upBound {
-				return options, fmt.Errorf(&quot;the serviceaccount max expiration must be between 1 hour to 2^32 seconds&quot;)
+			upBound := time.Duration(1<<32) * time.Second
+			if s.Authentication.ServiceAccounts.MaxExpiration < lowBound ||
+				s.Authentication.ServiceAccounts.MaxExpiration > upBound {
+				return options, fmt.Errorf("the serviceaccount max expiration must be between 1 hour to 2^32 seconds")
 			}
 		}
 
 		s.ServiceAccountIssuer, err = serviceaccount.JWTTokenGenerator(s.Authentication.ServiceAccounts.Issuer, sk)
 		if err != nil {
-			return options, fmt.Errorf(&quot;failed to build token generator: %v&quot;, err)
+			return options, fmt.Errorf("failed to build token generator: %v", err)
 		}
 		s.ServiceAccountTokenMaxExpiration = s.Authentication.ServiceAccounts.MaxExpiration
 	}
 
 	if s.Etcd.EnableWatchCache {
-		klog.V(2).Infof(&quot;Initializing cache sizes based on %dMB limit&quot;, s.GenericServerRunOptions.TargetRAMMB)
+		klog.V(2).Infof("Initializing cache sizes based on %dMB limit", s.GenericServerRunOptions.TargetRAMMB)
 		sizes := cachesize.NewHeuristicWatchCacheSizes(s.GenericServerRunOptions.TargetRAMMB)
 		if userSpecified, err := serveroptions.ParseWatchCacheSizes(s.Etcd.WatchCacheSizes); err == nil {
 			for resource, size := range userSpecified {
@@ -242,12 +244,12 @@ func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
 
 	if s.APIEnablement.RuntimeConfig != nil {
 		for key, value := range s.APIEnablement.RuntimeConfig {
-			if key == &quot;v1&quot; || strings.HasPrefix(key, &quot;v1/&quot;) ||
-				key == &quot;api/v1&quot; || strings.HasPrefix(key, &quot;api/v1/&quot;) {
+			if key == "v1" || strings.HasPrefix(key, "v1/") ||
+				key == "api/v1" || strings.HasPrefix(key, "api/v1/") {
 				delete(s.APIEnablement.RuntimeConfig, key)
-				s.APIEnablement.RuntimeConfig[&quot;/v1&quot;] = value
+				s.APIEnablement.RuntimeConfig["/v1"] = value
 			}
-			if key == &quot;api/legacy&quot; {
+			if key == "api/legacy" {
 				delete(s.APIEnablement.RuntimeConfig, key)
 			}
 		}
@@ -257,19 +259,21 @@ func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
 }
 ```
 
+
+
 ###### genericapiserver.SetupSignalHandler()生成过程
 
-genericapiserver 即为&quot;k8s.io/apiserver/pkg/server&quot; 包
+genericapiserver 即为"k8s.io/apiserver/pkg/server"  包
 
 该包staging在如下目录
 
-&gt; staging/src/k8s.io/apiserver/pkg/server/signal.go
+> staging/src/k8s.io/apiserver/pkg/server/signal.go
 
 ```
 // SetupSignalHandler registered for SIGTERM and SIGINT. A stop channel is returned
 // which is closed on one of these signals. If a second signal is caught, the program
 // is terminated with exit code 1.
-func SetupSignalHandler() &lt;-chan struct{} {
+func SetupSignalHandler() <-chan struct{} {
 	close(onlyOneSignalHandler) // panics when called twice
 
 	shutdownHandler = make(chan os.Signal, 2)
@@ -277,9 +281,9 @@ func SetupSignalHandler() &lt;-chan struct{} {
 	stop := make(chan struct{})
 	signal.Notify(shutdownHandler, shutdownSignals...)
 	go func() {
-		&lt;-shutdownHandler
+		<-shutdownHandler
 		close(stop)
-		&lt;-shutdownHandler
+		<-shutdownHandler
 		os.Exit(1) // second signal. Exit directly.
 	}()
 
@@ -287,9 +291,11 @@ func SetupSignalHandler() &lt;-chan struct{} {
 }
 ```
 
+
+
 #### Run函数
 
-&gt; cmd/kube-apiserver/app/server.go
+> cmd/kube-apiserver/app/server.go
 
 ```
 // Run runs the specified APIServer. This should never exit.
@@ -307,3 +313,13 @@ prepared, err := server.PrepareRun()
 return prepared.Run(stopCh)
 }
 ```
+
+
+
+
+
+
+
+
+
+
