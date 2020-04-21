@@ -27,9 +27,13 @@ func main() {
 
 主要是创建一个command,然后Execute该command.
 
-#### command是怎么被创建的呢?
+#### command的创建
 
-> cmd/kube-apiserver/app/server.go
+```
+command := app.NewAPIServerCommand()
+```
+
+> k8s.io/kubernetes/cmd/kube-apiserver/app
 
 ```
 // NewAPIServerCommand creates a *cobra.Command object with default parameters
@@ -85,13 +89,115 @@ cluster's shared state through which all other components interact.`,
 }
 ```
 
-首先，通过options.NewServerRunOptions，创建了apiserver的ServerRunOption；
+##### 首先，通过options.NewServerRunOptions，创建了apiserver的ServerRunOption；
 
-然后，通过complete函数设置apiserver默认运行参数，名为completedOptions；
+> k8s.io/kubernetes/cmd/kube-apiserver/app/options
+
+```
+// ServerRunOptions runs a kubernetes api server.
+type ServerRunOptions struct {
+	GenericServerRunOptions *genericoptions.ServerRunOptions
+	Etcd                    *genericoptions.EtcdOptions
+	SecureServing           *genericoptions.SecureServingOptionsWithLoopback
+	InsecureServing         *genericoptions.DeprecatedInsecureServingOptionsWithLoopback
+	Audit                   *genericoptions.AuditOptions
+	Features                *genericoptions.FeatureOptions
+	Admission               *kubeoptions.AdmissionOptions
+	Authentication          *kubeoptions.BuiltInAuthenticationOptions
+	Authorization           *kubeoptions.BuiltInAuthorizationOptions
+	CloudProvider           *kubeoptions.CloudProviderOptions
+	APIEnablement           *genericoptions.APIEnablementOptions
+	EgressSelector          *genericoptions.EgressSelectorOptions
+
+	AllowPrivileged           bool
+	EnableLogsHandler         bool
+	EventTTL                  time.Duration
+	KubeletConfig             kubeletclient.KubeletClientConfig
+	KubernetesServiceNodePort int
+	MaxConnectionBytesPerSec  int64
+	// ServiceClusterIPRange is mapped to input provided by user
+	ServiceClusterIPRanges string
+	//PrimaryServiceClusterIPRange and SecondaryServiceClusterIPRange are the results
+	// of parsing ServiceClusterIPRange into actual values
+	PrimaryServiceClusterIPRange   net.IPNet
+	SecondaryServiceClusterIPRange net.IPNet
+
+	ServiceNodePortRange utilnet.PortRange
+	SSHKeyfile           string
+	SSHUser              string
+
+	ProxyClientCertFile string
+	ProxyClientKeyFile  string
+
+	EnableAggregatorRouting bool
+
+	MasterCount            int
+	EndpointReconcilerType string
+
+	ServiceAccountSigningKeyFile     string
+	ServiceAccountIssuer             serviceaccount.TokenGenerator
+	ServiceAccountTokenMaxExpiration time.Duration
+
+	ShowHiddenMetricsForVersion string
+}
+```
+
+```
+// NewServerRunOptions creates a new ServerRunOptions object with default parameters
+func NewServerRunOptions() *ServerRunOptions {
+	s := ServerRunOptions{
+		GenericServerRunOptions: genericoptions.NewServerRunOptions(),
+		Etcd:                    genericoptions.NewEtcdOptions(storagebackend.NewDefaultConfig(kubeoptions.DefaultEtcdPathPrefix, nil)),
+		SecureServing:           kubeoptions.NewSecureServingOptions(),
+		InsecureServing:         kubeoptions.NewInsecureServingOptions(),
+		Audit:                   genericoptions.NewAuditOptions(),
+		Features:                genericoptions.NewFeatureOptions(),
+		Admission:               kubeoptions.NewAdmissionOptions(),
+		Authentication:          kubeoptions.NewBuiltInAuthenticationOptions().WithAll(),
+		Authorization:           kubeoptions.NewBuiltInAuthorizationOptions(),
+		CloudProvider:           kubeoptions.NewCloudProviderOptions(),
+		APIEnablement:           genericoptions.NewAPIEnablementOptions(),
+		EgressSelector:          genericoptions.NewEgressSelectorOptions(),
+
+		EnableLogsHandler:      true,
+		EventTTL:               1 * time.Hour,
+		MasterCount:            1,
+		EndpointReconcilerType: string(reconcilers.LeaseEndpointReconcilerType),
+		KubeletConfig: kubeletclient.KubeletClientConfig{
+			Port:         ports.KubeletPort,
+			ReadOnlyPort: ports.KubeletReadOnlyPort,
+			PreferredAddressTypes: []string{
+				// --override-hostname
+				string(api.NodeHostName),
+
+				// internal, preferring DNS if reported
+				string(api.NodeInternalDNS),
+				string(api.NodeInternalIP),
+
+				// external, preferring DNS if reported
+				string(api.NodeExternalDNS),
+				string(api.NodeExternalIP),
+			},
+			EnableHTTPS: true,
+			HTTPTimeout: time.Duration(5) * time.Second,
+		},
+		ServiceNodePortRange: kubeoptions.DefaultServiceNodePortRange,
+	}
+
+	// Overwrite the default for storage data format.
+	s.Etcd.DefaultStorageMediaType = "application/vnd.kubernetes.protobuf"
+
+	return &s
+}
+```
+
+##### 然后，通过complete函数设置apiserver默认运行参数，名为completedOptions；
+
+
 
 最后，返回run函数，run函数加载completedOptions及genericapiserver.SetupSignalHandler()参数。run函数即为**command**主体，为Execute的对象；
 
-##### completedOptions生成过程
+###### completedOptions生成过程
 
 > cmd/kube-apiserver/app/options/options.go
 
@@ -155,11 +261,9 @@ completedServerRunOptions定于如下
 ```
 // completedServerRunOptions is a private wrapper that enforces a call of Complete() before Run can be invoked.
 type completedServerRunOptions struct {
-	*options.ServerRunOptions
+    *options.ServerRunOptions
 }
 ```
-
-
 
 > cmd/kube-apiserver/app/server.go
 
