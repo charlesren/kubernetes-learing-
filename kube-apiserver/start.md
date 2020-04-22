@@ -485,7 +485,7 @@ type APIAggregator struct {
 }
 ```
 
-生成server（APIAggregator类型）后，调用PrepareRun（)方法生成preparedAPIAggregator
+**生成server（APIAggregator类型）后，调用PrepareRun（)方法生成preparedAPIAggregator**
 
 ```
 prepared, err := server.PrepareRun()
@@ -557,9 +557,7 @@ prepared := s.GenericAPIServer.PrepareRun()
 return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil
 ```
 
-
-**可以发现preparedAPIAggregator中runnable为prepared,实际为 APIAggregator.GenericAPIServer.PrepareRun()函数返回值,是一个结构体，类型为*GenericAPIServer**
-
+**可以发现preparedAPIAggregator中runnable为prepared,实际为 APIAggregator.GenericAPIServer.PrepareRun()函数返回值,是一个结构体，类型为preparedGenericAPIServer**
 
 GenericAPIServer及PrepareRun方法定义为
 
@@ -568,122 +566,120 @@ GenericAPIServer及PrepareRun方法定义为
 ```
 // GenericAPIServer contains state for a Kubernetes cluster api server.
 type GenericAPIServer struct {
-	// discoveryAddresses is used to build cluster IPs for discovery.
-	discoveryAddresses discovery.Addresses
+    // discoveryAddresses is used to build cluster IPs for discovery.
+    discoveryAddresses discovery.Addresses
 
-	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
-	LoopbackClientConfig *restclient.Config
+    // LoopbackClientConfig is a config for a privileged loopback connection to the API server
+    LoopbackClientConfig *restclient.Config
 
-	// minRequestTimeout is how short the request timeout can be.  This is used to build the RESTHandler
-	minRequestTimeout time.Duration
+    // minRequestTimeout is how short the request timeout can be.  This is used to build the RESTHandler
+    minRequestTimeout time.Duration
 
-	// ShutdownTimeout is the timeout used for server shutdown. This specifies the timeout before server
-	// gracefully shutdown returns.
-	ShutdownTimeout time.Duration
+    // ShutdownTimeout is the timeout used for server shutdown. This specifies the timeout before server
+    // gracefully shutdown returns.
+    ShutdownTimeout time.Duration
 
-	// legacyAPIGroupPrefixes is used to set up URL parsing for authorization and for validating requests
-	// to InstallLegacyAPIGroup
-	legacyAPIGroupPrefixes sets.String
+    // legacyAPIGroupPrefixes is used to set up URL parsing for authorization and for validating requests
+    // to InstallLegacyAPIGroup
+    legacyAPIGroupPrefixes sets.String
 
-	// admissionControl is used to build the RESTStorage that backs an API Group.
-	admissionControl admission.Interface
+    // admissionControl is used to build the RESTStorage that backs an API Group.
+    admissionControl admission.Interface
 
-	// SecureServingInfo holds configuration of the TLS server.
-	SecureServingInfo *SecureServingInfo
+    // SecureServingInfo holds configuration of the TLS server.
+    SecureServingInfo *SecureServingInfo
 
-	// ExternalAddress is the address (hostname or IP and port) that should be used in
-	// external (public internet) URLs for this GenericAPIServer.
-	ExternalAddress string
+    // ExternalAddress is the address (hostname or IP and port) that should be used in
+    // external (public internet) URLs for this GenericAPIServer.
+    ExternalAddress string
 
-	// Serializer controls how common API objects not in a group/version prefix are serialized for this server.
-	// Individual APIGroups may define their own serializers.
-	Serializer runtime.NegotiatedSerializer
+    // Serializer controls how common API objects not in a group/version prefix are serialized for this server.
+    // Individual APIGroups may define their own serializers.
+    Serializer runtime.NegotiatedSerializer
 
-	// "Outputs"
-	// Handler holds the handlers being used by this API server
-	Handler *APIServerHandler
+    // "Outputs"
+    // Handler holds the handlers being used by this API server
+    Handler *APIServerHandler
 
-	// listedPathProvider is a lister which provides the set of paths to show at /
-	listedPathProvider routes.ListedPathProvider
+    // listedPathProvider is a lister which provides the set of paths to show at /
+    listedPathProvider routes.ListedPathProvider
 
-	// DiscoveryGroupManager serves /apis
-	DiscoveryGroupManager discovery.GroupManager
+    // DiscoveryGroupManager serves /apis
+    DiscoveryGroupManager discovery.GroupManager
 
-	// Enable swagger and/or OpenAPI if these configs are non-nil.
-	openAPIConfig *openapicommon.Config
+    // Enable swagger and/or OpenAPI if these configs are non-nil.
+    openAPIConfig *openapicommon.Config
 
-	// OpenAPIVersionedService controls the /openapi/v2 endpoint, and can be used to update the served spec.
-	// It is set during PrepareRun.
-	OpenAPIVersionedService *handler.OpenAPIService
+    // OpenAPIVersionedService controls the /openapi/v2 endpoint, and can be used to update the served spec.
+    // It is set during PrepareRun.
+    OpenAPIVersionedService *handler.OpenAPIService
 
-	// StaticOpenAPISpec is the spec derived from the restful container endpoints.
-	// It is set during PrepareRun.
-	StaticOpenAPISpec *spec.Swagger
+    // StaticOpenAPISpec is the spec derived from the restful container endpoints.
+    // It is set during PrepareRun.
+    StaticOpenAPISpec *spec.Swagger
 
-	// PostStartHooks are each called after the server has started listening, in a separate go func for each
-	// with no guarantee of ordering between them.  The map key is a name used for error reporting.
-	// It may kill the process with a panic if it wishes to by returning an error.
-	postStartHookLock      sync.Mutex
-	postStartHooks         map[string]postStartHookEntry
-	postStartHooksCalled   bool
-	disabledPostStartHooks sets.String
+    // PostStartHooks are each called after the server has started listening, in a separate go func for each
+    // with no guarantee of ordering between them.  The map key is a name used for error reporting.
+    // It may kill the process with a panic if it wishes to by returning an error.
+    postStartHookLock      sync.Mutex
+    postStartHooks         map[string]postStartHookEntry
+    postStartHooksCalled   bool
+    disabledPostStartHooks sets.String
 
-	preShutdownHookLock    sync.Mutex
-	preShutdownHooks       map[string]preShutdownHookEntry
-	preShutdownHooksCalled bool
+    preShutdownHookLock    sync.Mutex
+    preShutdownHooks       map[string]preShutdownHookEntry
+    preShutdownHooksCalled bool
 
-	// healthz checks
-	healthzLock            sync.Mutex
-	healthzChecks          []healthz.HealthChecker
-	healthzChecksInstalled bool
-	// livez checks
-	livezLock            sync.Mutex
-	livezChecks          []healthz.HealthChecker
-	livezChecksInstalled bool
-	// readyz checks
-	readyzLock            sync.Mutex
-	readyzChecks          []healthz.HealthChecker
-	readyzChecksInstalled bool
-	livezGracePeriod      time.Duration
-	livezClock            clock.Clock
-	// the readiness stop channel is used to signal that the apiserver has initiated a shutdown sequence, this
-	// will cause readyz to return unhealthy.
-	readinessStopCh chan struct{}
+    // healthz checks
+    healthzLock            sync.Mutex
+    healthzChecks          []healthz.HealthChecker
+    healthzChecksInstalled bool
+    // livez checks
+    livezLock            sync.Mutex
+    livezChecks          []healthz.HealthChecker
+    livezChecksInstalled bool
+    // readyz checks
+    readyzLock            sync.Mutex
+    readyzChecks          []healthz.HealthChecker
+    readyzChecksInstalled bool
+    livezGracePeriod      time.Duration
+    livezClock            clock.Clock
+    // the readiness stop channel is used to signal that the apiserver has initiated a shutdown sequence, this
+    // will cause readyz to return unhealthy.
+    readinessStopCh chan struct{}
 
-	// auditing. The backend is started after the server starts listening.
-	AuditBackend audit.Backend
+    // auditing. The backend is started after the server starts listening.
+    AuditBackend audit.Backend
 
-	// Authorizer determines whether a user is allowed to make a certain request. The Handler does a preliminary
-	// authorization check using the request URI but it may be necessary to make additional checks, such as in
-	// the create-on-update case
-	Authorizer authorizer.Authorizer
+    // Authorizer determines whether a user is allowed to make a certain request. The Handler does a preliminary
+    // authorization check using the request URI but it may be necessary to make additional checks, such as in
+    // the create-on-update case
+    Authorizer authorizer.Authorizer
 
-	// EquivalentResourceRegistry provides information about resources equivalent to a given resource,
-	// and the kind associated with a given resource. As resources are installed, they are registered here.
-	EquivalentResourceRegistry runtime.EquivalentResourceRegistry
+    // EquivalentResourceRegistry provides information about resources equivalent to a given resource,
+    // and the kind associated with a given resource. As resources are installed, they are registered here.
+    EquivalentResourceRegistry runtime.EquivalentResourceRegistry
 
-	// enableAPIResponseCompression indicates whether API Responses should support compression
-	// if the client requests it via Accept-Encoding
-	enableAPIResponseCompression bool
+    // enableAPIResponseCompression indicates whether API Responses should support compression
+    // if the client requests it via Accept-Encoding
+    enableAPIResponseCompression bool
 
-	// delegationTarget is the next delegate in the chain. This is never nil.
-	delegationTarget DelegationTarget
+    // delegationTarget is the next delegate in the chain. This is never nil.
+    delegationTarget DelegationTarget
 
-	// HandlerChainWaitGroup allows you to wait for all chain handlers finish after the server shutdown.
-	HandlerChainWaitGroup *utilwaitgroup.SafeWaitGroup
+    // HandlerChainWaitGroup allows you to wait for all chain handlers finish after the server shutdown.
+    HandlerChainWaitGroup *utilwaitgroup.SafeWaitGroup
 
-	// ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
-	// have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
-	// but /readyz will return failure.
-	ShutdownDelayDuration time.Duration
+    // ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
+    // have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
+    // but /readyz will return failure.
+    ShutdownDelayDuration time.Duration
 
-	// The limit on the request body size that would be accepted and decoded in a write request.
-	// 0 means no limit.
-	maxRequestBodyBytes int64
+    // The limit on the request body size that would be accepted and decoded in a write request.
+    // 0 means no limit.
+    maxRequestBodyBytes int64
 }
 ```
-
-
 
 ```
 // PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
@@ -726,19 +722,13 @@ type preparedGenericAPIServer struct {
 }
 ```
 
+可以发现preparedAPIAggregator其实是在APIAggregator基础上，包装了preparedGenericAPIServer
 
-
-
-
-可以发现，prepared, err := server.PrepareRun() 的作用为处理APIAggreator 生成 preparedGenericAPIServer，是GenericAPIServe的包装
-
-APIAggregator生成后，调用preparedAPIAggregator的Run()方法 
+**preparedAPIAggregator生成后，调用preparedAPIAggregator的Run()方法**
 
 ```
 return prepared.Run(stopCh)
 ```
-
-
 
 > k8s.io/apiserver/pkg/server/genericapiserver.go
 
@@ -750,7 +740,7 @@ func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
 
 实际返回preparedAPIAggregator.runmable的Run方法,即preparedGenericAPIServer的run方法
 
->  staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go
+> k8s.io/apiserver/pkg/server/genericapiserver.go
 
 ```
 // Run spawns the secure http server. It only returns if stopCh is closed
