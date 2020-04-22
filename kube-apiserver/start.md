@@ -33,7 +33,7 @@ func main() {
 command := app.NewAPIServerCommand()
 ```
 
-> k8s.io/kubernetes/cmd/kube-apiserver/app
+> k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
 ```
 // NewAPIServerCommand creates a *cobra.Command object with default parameters
@@ -89,117 +89,11 @@ cluster's shared state through which all other components interact.`,
 }
 ```
 
+app.NewAPIServerCommand()是干嘛的呢？
+
 ##### 首先，通过options.NewServerRunOptions，创建了apiserver的ServerRunOption；
 
-> k8s.io/kubernetes/cmd/kube-apiserver/app/options
-
-```
-// ServerRunOptions runs a kubernetes api server.
-type ServerRunOptions struct {
-	GenericServerRunOptions *genericoptions.ServerRunOptions
-	Etcd                    *genericoptions.EtcdOptions
-	SecureServing           *genericoptions.SecureServingOptionsWithLoopback
-	InsecureServing         *genericoptions.DeprecatedInsecureServingOptionsWithLoopback
-	Audit                   *genericoptions.AuditOptions
-	Features                *genericoptions.FeatureOptions
-	Admission               *kubeoptions.AdmissionOptions
-	Authentication          *kubeoptions.BuiltInAuthenticationOptions
-	Authorization           *kubeoptions.BuiltInAuthorizationOptions
-	CloudProvider           *kubeoptions.CloudProviderOptions
-	APIEnablement           *genericoptions.APIEnablementOptions
-	EgressSelector          *genericoptions.EgressSelectorOptions
-
-	AllowPrivileged           bool
-	EnableLogsHandler         bool
-	EventTTL                  time.Duration
-	KubeletConfig             kubeletclient.KubeletClientConfig
-	KubernetesServiceNodePort int
-	MaxConnectionBytesPerSec  int64
-	// ServiceClusterIPRange is mapped to input provided by user
-	ServiceClusterIPRanges string
-	//PrimaryServiceClusterIPRange and SecondaryServiceClusterIPRange are the results
-	// of parsing ServiceClusterIPRange into actual values
-	PrimaryServiceClusterIPRange   net.IPNet
-	SecondaryServiceClusterIPRange net.IPNet
-
-	ServiceNodePortRange utilnet.PortRange
-	SSHKeyfile           string
-	SSHUser              string
-
-	ProxyClientCertFile string
-	ProxyClientKeyFile  string
-
-	EnableAggregatorRouting bool
-
-	MasterCount            int
-	EndpointReconcilerType string
-
-	ServiceAccountSigningKeyFile     string
-	ServiceAccountIssuer             serviceaccount.TokenGenerator
-	ServiceAccountTokenMaxExpiration time.Duration
-
-	ShowHiddenMetricsForVersion string
-}
-```
-
-```
-// NewServerRunOptions creates a new ServerRunOptions object with default parameters
-func NewServerRunOptions() *ServerRunOptions {
-	s := ServerRunOptions{
-		GenericServerRunOptions: genericoptions.NewServerRunOptions(),
-		Etcd:                    genericoptions.NewEtcdOptions(storagebackend.NewDefaultConfig(kubeoptions.DefaultEtcdPathPrefix, nil)),
-		SecureServing:           kubeoptions.NewSecureServingOptions(),
-		InsecureServing:         kubeoptions.NewInsecureServingOptions(),
-		Audit:                   genericoptions.NewAuditOptions(),
-		Features:                genericoptions.NewFeatureOptions(),
-		Admission:               kubeoptions.NewAdmissionOptions(),
-		Authentication:          kubeoptions.NewBuiltInAuthenticationOptions().WithAll(),
-		Authorization:           kubeoptions.NewBuiltInAuthorizationOptions(),
-		CloudProvider:           kubeoptions.NewCloudProviderOptions(),
-		APIEnablement:           genericoptions.NewAPIEnablementOptions(),
-		EgressSelector:          genericoptions.NewEgressSelectorOptions(),
-
-		EnableLogsHandler:      true,
-		EventTTL:               1 * time.Hour,
-		MasterCount:            1,
-		EndpointReconcilerType: string(reconcilers.LeaseEndpointReconcilerType),
-		KubeletConfig: kubeletclient.KubeletClientConfig{
-			Port:         ports.KubeletPort,
-			ReadOnlyPort: ports.KubeletReadOnlyPort,
-			PreferredAddressTypes: []string{
-				// --override-hostname
-				string(api.NodeHostName),
-
-				// internal, preferring DNS if reported
-				string(api.NodeInternalDNS),
-				string(api.NodeInternalIP),
-
-				// external, preferring DNS if reported
-				string(api.NodeExternalDNS),
-				string(api.NodeExternalIP),
-			},
-			EnableHTTPS: true,
-			HTTPTimeout: time.Duration(5) * time.Second,
-		},
-		ServiceNodePortRange: kubeoptions.DefaultServiceNodePortRange,
-	}
-
-	// Overwrite the default for storage data format.
-	s.Etcd.DefaultStorageMediaType = "application/vnd.kubernetes.protobuf"
-
-	return &s
-}
-```
-
-##### 然后，通过complete函数设置apiserver默认运行参数，名为completedOptions；
-
-
-
-最后，返回run函数，run函数加载completedOptions及genericapiserver.SetupSignalHandler()参数。run函数即为**command**主体，为Execute的对象；
-
-###### completedOptions生成过程
-
-> cmd/kube-apiserver/app/options/options.go
+> k8s.io/kubernetes/cmd/kube-apiserver/app/options/options.go
 
 ```
 // ServerRunOptions runs a kubernetes api server.
@@ -250,13 +144,70 @@ type ServerRunOptions struct {
 }
 ```
 
+```
+// NewServerRunOptions creates a new ServerRunOptions object with default parameters
+func NewServerRunOptions() *ServerRunOptions {
+    s := ServerRunOptions{
+        GenericServerRunOptions: genericoptions.NewServerRunOptions(),
+        Etcd:                    genericoptions.NewEtcdOptions(storagebackend.NewDefaultConfig(kubeoptions.DefaultEtcdPathPrefix, nil)),
+        SecureServing:           kubeoptions.NewSecureServingOptions(),
+        InsecureServing:         kubeoptions.NewInsecureServingOptions(),
+        Audit:                   genericoptions.NewAuditOptions(),
+        Features:                genericoptions.NewFeatureOptions(),
+        Admission:               kubeoptions.NewAdmissionOptions(),
+        Authentication:          kubeoptions.NewBuiltInAuthenticationOptions().WithAll(),
+        Authorization:           kubeoptions.NewBuiltInAuthorizationOptions(),
+        CloudProvider:           kubeoptions.NewCloudProviderOptions(),
+        APIEnablement:           genericoptions.NewAPIEnablementOptions(),
+        EgressSelector:          genericoptions.NewEgressSelectorOptions(),
+
+        EnableLogsHandler:      true,
+        EventTTL:               1 * time.Hour,
+        MasterCount:            1,
+        EndpointReconcilerType: string(reconcilers.LeaseEndpointReconcilerType),
+        KubeletConfig: kubeletclient.KubeletClientConfig{
+            Port:         ports.KubeletPort,
+            ReadOnlyPort: ports.KubeletReadOnlyPort,
+            PreferredAddressTypes: []string{
+                // --override-hostname
+                string(api.NodeHostName),
+
+                // internal, preferring DNS if reported
+                string(api.NodeInternalDNS),
+                string(api.NodeInternalIP),
+
+                // external, preferring DNS if reported
+                string(api.NodeExternalDNS),
+                string(api.NodeExternalIP),
+            },
+            EnableHTTPS: true,
+            HTTPTimeout: time.Duration(5) * time.Second,
+        },
+        ServiceNodePortRange: kubeoptions.DefaultServiceNodePortRange,
+    }
+
+    // Overwrite the default for storage data format.
+    s.Etcd.DefaultStorageMediaType = "application/vnd.kubernetes.protobuf"
+
+    return &s
+}
+```
+
 options.NewServerRunOptions比较简单，只是用默认参数创建了一个新的ServerRunOptions对象。
+
+##### 然后，通过complete函数设置apiserver默认运行参数，名为completedOptions；
+
+```
+completedOptions, err := Complete(s)
+```
+
+###### completedOptions生成过程
 
 complete函数处理ServerRunOptions，生成completedServerRunOptions。complete函数必须在kube-apiserve flags处理后调用。
 
-completedServerRunOptions定于如下
+completedServerRunOptions及Complete函数定义如下
 
-> cmd/kube-apiserver/app/server.go
+> k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
 ```
 // completedServerRunOptions is a private wrapper that enforces a call of Complete() before Run can be invoked.
@@ -264,8 +215,6 @@ type completedServerRunOptions struct {
     *options.ServerRunOptions
 }
 ```
-
-> cmd/kube-apiserver/app/server.go
 
 ```
 // Complete set default ServerRunOptions.
@@ -376,13 +325,15 @@ func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
 }
 ```
 
+##### 最后，返回run函数，run函数加载completedOptions及genericapiserver.SetupSignalHandler()参数。run函数即为**command**主体，为Execute的对象；
+
+```
+return Run(completedOptions, genericapiserver.SetupSignalHandler())
+```
+
 ###### genericapiserver.SetupSignalHandler()生成过程
 
-genericapiserver 即为"k8s.io/apiserver/pkg/server"  包
-
-该包staging在如下目录
-
-> staging/src/k8s.io/apiserver/pkg/server/signal.go
+> k8s.io/apiserver/pkg/server/signal.go
 
 ```
 // SetupSignalHandler registered for SIGTERM and SIGINT. A stop channel is returned
@@ -410,7 +361,7 @@ func SetupSignalHandler() <-chan struct{} {
 
 #### Run函数
 
-> cmd/kube-apiserver/app/server.go
+> k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
 ```
 // Run runs the specified APIServer. This should never exit.
@@ -430,51 +381,14 @@ return prepared.Run(stopCh)
 ```
 
 **首先调用CreateServerChain函数，该函数目的是生成server结构体，类型为APIAggregator。**
-APIAggregator定义在k8s.io/kube-aggregator/pkg/apiserver,staging在
-
-> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
 ```
-// APIAggregator contains state for a Kubernetes cluster master/api server.
-type APIAggregator struct {
-    GenericAPIServer *genericapiserver.GenericAPIServer
-
-    delegateHandler http.Handler
-
-    // proxyClientCert/Key are the client cert used to identify this proxy. Backing APIServices use
-    // this to confirm the proxy's identity
-    proxyClientCert []byte
-    proxyClientKey  []byte
-    proxyTransport  *http.Transport
-
-    // proxyHandlers are the proxy handlers that are currently registered, keyed by apiservice.name
-    proxyHandlers map[string]*proxyHandler
-    // handledGroups are the groups that already have routes
-    handledGroups sets.String
-
-    // lister is used to add group handling for /apis/<group> aggregator lookups based on
-    // controller state
-    lister listers.APIServiceLister
-
-    // provided for easier embedding
-    APIRegistrationInformers informers.SharedInformerFactory
-
-    // Information needed to determine routing for the aggregator
-    serviceResolver ServiceResolver
-
-    // Enable swagger and/or OpenAPI if these configs are non-nil.
-    openAPIConfig *openapicommon.Config
-
-    // openAPIAggregationController downloads and merges OpenAPI specs.
-    openAPIAggregationController *openapicontroller.AggregationController
-
-    // egressSelector selects the proper egress dialer to communicate with the custom apiserver
-    // overwrites proxyTransport dialer if not nil
-    egressSelector *egressselector.EgressSelector
-}
+server, err := CreateServerChain(completeOptions, stopCh)
 ```
 
-> cmd/kube-apiserver/app/server.go
+CreateServerChain函数定义为
+
+> k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
 ```
 // CreateServerChain creates the apiservers connected via delegation.
@@ -527,29 +441,57 @@ func CreateServerChain(completedOptions completedServerRunOptions, stopCh <-chan
 }
 ```
 
+APIAggregator定义为
+
+> k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
+
+```
+// APIAggregator contains state for a Kubernetes cluster master/api server.
+type APIAggregator struct {
+    GenericAPIServer *genericapiserver.GenericAPIServer
+
+    delegateHandler http.Handler
+
+    // proxyClientCert/Key are the client cert used to identify this proxy. Backing APIServices use
+    // this to confirm the proxy's identity
+    proxyClientCert []byte
+    proxyClientKey  []byte
+    proxyTransport  *http.Transport
+
+    // proxyHandlers are the proxy handlers that are currently registered, keyed by apiservice.name
+    proxyHandlers map[string]*proxyHandler
+    // handledGroups are the groups that already have routes
+    handledGroups sets.String
+
+    // lister is used to add group handling for /apis/<group> aggregator lookups based on
+    // controller state
+    lister listers.APIServiceLister
+
+    // provided for easier embedding
+    APIRegistrationInformers informers.SharedInformerFactory
+
+    // Information needed to determine routing for the aggregator
+    serviceResolver ServiceResolver
+
+    // Enable swagger and/or OpenAPI if these configs are non-nil.
+    openAPIConfig *openapicommon.Config
+
+    // openAPIAggregationController downloads and merges OpenAPI specs.
+    openAPIAggregationController *openapicontroller.AggregationController
+
+    // egressSelector selects the proper egress dialer to communicate with the custom apiserver
+    // overwrites proxyTransport dialer if not nil
+    egressSelector *egressselector.EgressSelector
+}
+```
+
 生成server（APIAggregator类型）后，调用PrepareRun（)方法生成preparedAPIAggregator
-preparedAPIAggregator定义如下：
-
-> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
 ```
-// preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
-type preparedAPIAggregator struct {
-    *APIAggregator
-    runnable runnable
-}
+prepared, err := server.PrepareRun()
 ```
 
-```
-type runnable interface {
-    Run(stopCh <-chan struct{}) error
-}
-```
-
-实际上是在APIAggregator基础上，包装了runable类型的interface .
-该interface 有Run方法。
-
-> staging/src/k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
+> k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
 ```
 // PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec and calling
@@ -584,19 +526,164 @@ func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
 }
 ```
 
-从prepared := s.GenericAPIServer.PrepareRun()及return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil发现
-**preparedAPIAggregator中runnable为prepared,实际为 APIAggregator.GenericAPIServer.PrepareRun()函数返回值,是一个结构体，类型为*GenericAPIServer**
-**runnable才是真命天子**
-结构体定义及PrepareRun函数如下
+preparedAPIAggregator定义为
 
-> staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go
+> k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
 ```
 // preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
-type preparedGenericAPIServer struct {
-    *GenericAPIServer
+type preparedAPIAggregator struct {
+    *APIAggregator
+    runnable runnable
 }
 ```
+
+```
+type runnable interface {
+    Run(stopCh <-chan struct{}) error
+}
+```
+
+preparedAPIAggregator实际上是在APIAggregator基础上，包装了runable类型的interface 
+该interface 有Run方法。
+
+preparedAPIAggregator具体是怎么生成的呢，查看APIAggregator的PrepareRun()方法发现有如下两句
+
+```
+prepared := s.GenericAPIServer.PrepareRun()
+```
+
+```
+return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil
+```
+
+
+**可以发现preparedAPIAggregator中runnable为prepared,实际为 APIAggregator.GenericAPIServer.PrepareRun()函数返回值,是一个结构体，类型为*GenericAPIServer**
+
+
+GenericAPIServer及PrepareRun方法定义为
+
+> k8s.io/apiserver/pkg/server/genericapiserver.go
+
+```
+// GenericAPIServer contains state for a Kubernetes cluster api server.
+type GenericAPIServer struct {
+	// discoveryAddresses is used to build cluster IPs for discovery.
+	discoveryAddresses discovery.Addresses
+
+	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
+	LoopbackClientConfig *restclient.Config
+
+	// minRequestTimeout is how short the request timeout can be.  This is used to build the RESTHandler
+	minRequestTimeout time.Duration
+
+	// ShutdownTimeout is the timeout used for server shutdown. This specifies the timeout before server
+	// gracefully shutdown returns.
+	ShutdownTimeout time.Duration
+
+	// legacyAPIGroupPrefixes is used to set up URL parsing for authorization and for validating requests
+	// to InstallLegacyAPIGroup
+	legacyAPIGroupPrefixes sets.String
+
+	// admissionControl is used to build the RESTStorage that backs an API Group.
+	admissionControl admission.Interface
+
+	// SecureServingInfo holds configuration of the TLS server.
+	SecureServingInfo *SecureServingInfo
+
+	// ExternalAddress is the address (hostname or IP and port) that should be used in
+	// external (public internet) URLs for this GenericAPIServer.
+	ExternalAddress string
+
+	// Serializer controls how common API objects not in a group/version prefix are serialized for this server.
+	// Individual APIGroups may define their own serializers.
+	Serializer runtime.NegotiatedSerializer
+
+	// "Outputs"
+	// Handler holds the handlers being used by this API server
+	Handler *APIServerHandler
+
+	// listedPathProvider is a lister which provides the set of paths to show at /
+	listedPathProvider routes.ListedPathProvider
+
+	// DiscoveryGroupManager serves /apis
+	DiscoveryGroupManager discovery.GroupManager
+
+	// Enable swagger and/or OpenAPI if these configs are non-nil.
+	openAPIConfig *openapicommon.Config
+
+	// OpenAPIVersionedService controls the /openapi/v2 endpoint, and can be used to update the served spec.
+	// It is set during PrepareRun.
+	OpenAPIVersionedService *handler.OpenAPIService
+
+	// StaticOpenAPISpec is the spec derived from the restful container endpoints.
+	// It is set during PrepareRun.
+	StaticOpenAPISpec *spec.Swagger
+
+	// PostStartHooks are each called after the server has started listening, in a separate go func for each
+	// with no guarantee of ordering between them.  The map key is a name used for error reporting.
+	// It may kill the process with a panic if it wishes to by returning an error.
+	postStartHookLock      sync.Mutex
+	postStartHooks         map[string]postStartHookEntry
+	postStartHooksCalled   bool
+	disabledPostStartHooks sets.String
+
+	preShutdownHookLock    sync.Mutex
+	preShutdownHooks       map[string]preShutdownHookEntry
+	preShutdownHooksCalled bool
+
+	// healthz checks
+	healthzLock            sync.Mutex
+	healthzChecks          []healthz.HealthChecker
+	healthzChecksInstalled bool
+	// livez checks
+	livezLock            sync.Mutex
+	livezChecks          []healthz.HealthChecker
+	livezChecksInstalled bool
+	// readyz checks
+	readyzLock            sync.Mutex
+	readyzChecks          []healthz.HealthChecker
+	readyzChecksInstalled bool
+	livezGracePeriod      time.Duration
+	livezClock            clock.Clock
+	// the readiness stop channel is used to signal that the apiserver has initiated a shutdown sequence, this
+	// will cause readyz to return unhealthy.
+	readinessStopCh chan struct{}
+
+	// auditing. The backend is started after the server starts listening.
+	AuditBackend audit.Backend
+
+	// Authorizer determines whether a user is allowed to make a certain request. The Handler does a preliminary
+	// authorization check using the request URI but it may be necessary to make additional checks, such as in
+	// the create-on-update case
+	Authorizer authorizer.Authorizer
+
+	// EquivalentResourceRegistry provides information about resources equivalent to a given resource,
+	// and the kind associated with a given resource. As resources are installed, they are registered here.
+	EquivalentResourceRegistry runtime.EquivalentResourceRegistry
+
+	// enableAPIResponseCompression indicates whether API Responses should support compression
+	// if the client requests it via Accept-Encoding
+	enableAPIResponseCompression bool
+
+	// delegationTarget is the next delegate in the chain. This is never nil.
+	delegationTarget DelegationTarget
+
+	// HandlerChainWaitGroup allows you to wait for all chain handlers finish after the server shutdown.
+	HandlerChainWaitGroup *utilwaitgroup.SafeWaitGroup
+
+	// ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
+	// have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
+	// but /readyz will return failure.
+	ShutdownDelayDuration time.Duration
+
+	// The limit on the request body size that would be accepted and decoded in a write request.
+	// 0 means no limit.
+	maxRequestBodyBytes int64
+}
+```
+
+
 
 ```
 // PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
@@ -632,9 +719,28 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 }
 ```
 
-**可以发现，prepared, err := server.PrepareRun()  最终通过处理APIAggreator 生成 preparedGenericAPIServer，是GenericAPIServe的包装**
+```
+// preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+type preparedGenericAPIServer struct {
+    *GenericAPIServer
+}
+```
 
-preparedAPIAggregator生成后，调用preparedAPIAggregator的Run()方法
+
+
+
+
+可以发现，prepared, err := server.PrepareRun() 的作用为处理APIAggreator 生成 preparedGenericAPIServer，是GenericAPIServe的包装
+
+APIAggregator生成后，调用preparedAPIAggregator的Run()方法 
+
+```
+return prepared.Run(stopCh)
+```
+
+
+
+> k8s.io/apiserver/pkg/server/genericapiserver.go
 
 ```
 func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
