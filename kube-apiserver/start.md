@@ -738,7 +738,7 @@ func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
 }
 ```
 
-实际返回preparedAPIAggregator.runmable的Run方法,即preparedGenericAPIServer的run方法
+返回preparedAPIAggregator.runmable的Run方法, 实际最终返回preparedGenericAPIServer的run方法
 
 > k8s.io/apiserver/pkg/server/genericapiserver.go
 
