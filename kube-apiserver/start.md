@@ -359,7 +359,7 @@ func SetupSignalHandler() <-chan struct{} {
 
 可以发现genericapiserver.SetupSignalHandler()主要用来给Run函数传递一个channel,用来接收shutdownSignals....
 
-#### Run函数
+#### cmd/kube-apiserver/app/server.go Run函数
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
@@ -785,14 +785,82 @@ func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
 }
 ```
 
-#### run函数总结
+**cmd/kube-apiserver/app/server.go run函数总结**
 
-server, err := CreateServerChain(completeOptions, stopCh)
-作用为是生成server结构体，类型为APIAggregator
+- server, err := CreateServerChain(completeOptions, stopCh)
+  作用为是生成server结构体，类型为APIAggregator
 
-prepared, err := server.PrepareRun()
-作用为处理APIAggreator 生成 preparedAPIAggreator 结构体，该结构体是对APIAggreator的包装，增加了runable (GenericAPIServer)。
-并执行了GenericAPIServer的PrepareRun方法。（确保PrepareRun能够在下面的run前执行）
+- prepared, err := server.PrepareRun()
+  作用为处理APIAggreator 生成 preparedAPIAggreator 结构体，该结构体是对APIAggreator的包装，增加了runable (GenericAPIServer)。
+  并执行了GenericAPIServer的PrepareRun方法。（确保PrepareRun能够在下面的run前执行）
 
-return prepared.Run(stopCh)
-作用为执行preparedGenericAPIServer的run方法（preparedGenericAPIServer为GenericAPIServer的包装）
+- return prepared.Run(stopCh)
+  作用为执行preparedGenericAPIServer的run方法（preparedGenericAPIServer为GenericAPIServer的包装）
+
+#### preparedGenericAPIServer的run方法
+
+主要是调用preparedGenericAPIServer 的NonBlockingRun方法`
+
+```
+err := s.NonBlockingRun(delayedStopCh)
+```
+
+k8s.io/apiserver/pkg/server/genericapiserver.go
+
+```
+// NonBlockingRun spawns the secure http server. An error is
+// returned if the secure port cannot be listened on.
+func (s preparedGenericAPIServer) NonBlockingRun(stopCh <-chan struct{}) error {
+	// Use an stop channel to allow graceful shutdown without dropping audit events
+	// after http server shutdown.
+	auditStopCh := make(chan struct{})
+
+	// Start the audit backend before any request comes in. This means we must call Backend.Run
+	// before http server start serving. Otherwise the Backend.ProcessEvents call might block.
+	if s.AuditBackend != nil {
+		if err := s.AuditBackend.Run(auditStopCh); err != nil {
+			return fmt.Errorf("failed to run the audit backend: %v", err)
+		}
+	}
+
+	// Use an internal stop channel to allow cleanup of the listeners on error.
+	internalStopCh := make(chan struct{})
+	var stoppedCh <-chan struct{}
+	if s.SecureServingInfo != nil && s.Handler != nil {
+		var err error
+		stoppedCh, err = s.SecureServingInfo.Serve(s.Handler, s.ShutdownTimeout, internalStopCh)
+		if err != nil {
+			close(internalStopCh)
+			close(auditStopCh)
+			return err
+		}
+	}
+
+	// Now that listener have bound successfully, it is the
+	// responsibility of the caller to close the provided channel to
+	// ensure cleanup.
+	go func() {
+		<-stopCh
+		close(internalStopCh)
+		if stoppedCh != nil {
+			<-stoppedCh
+		}
+		s.HandlerChainWaitGroup.Wait()
+		close(auditStopCh)
+	}()
+
+	s.RunPostStartHooks(stopCh)
+
+	if _, err := systemd.SdNotify(true, "READY=1\n"); err != nil {
+		klog.Errorf("Unable to send systemd daemon successful start message: %v\n", err)
+	}
+
+	return nil
+}
+```
+
+```
+stoppedCh, err = s.SecureServingInfo.Serve(s.Handler, s.ShutdownTimeout, internalStopCh)
+```
+
+preparedGenericAPIServer.SecureServingInfo 类型为*SecureServingInfo
