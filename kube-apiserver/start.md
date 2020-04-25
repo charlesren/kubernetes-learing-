@@ -799,68 +799,158 @@ func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
 
 #### preparedGenericAPIServer的run方法
 
-主要是调用preparedGenericAPIServer 的NonBlockingRun方法`
+主要是调用preparedGenericAPIServer 的NonBlockingRun方法
 
 ```
 err := s.NonBlockingRun(delayedStopCh)
 ```
 
-k8s.io/apiserver/pkg/server/genericapiserver.go
+> k8s.io/apiserver/pkg/server/genericapiserver.go
 
-```
+```go
 // NonBlockingRun spawns the secure http server. An error is
 // returned if the secure port cannot be listened on.
 func (s preparedGenericAPIServer) NonBlockingRun(stopCh <-chan struct{}) error {
-	// Use an stop channel to allow graceful shutdown without dropping audit events
-	// after http server shutdown.
-	auditStopCh := make(chan struct{})
+    // Use an stop channel to allow graceful shutdown without dropping audit events
+    // after http server shutdown.
+    auditStopCh := make(chan struct{})
 
-	// Start the audit backend before any request comes in. This means we must call Backend.Run
-	// before http server start serving. Otherwise the Backend.ProcessEvents call might block.
-	if s.AuditBackend != nil {
-		if err := s.AuditBackend.Run(auditStopCh); err != nil {
-			return fmt.Errorf("failed to run the audit backend: %v", err)
-		}
-	}
+    // Start the audit backend before any request comes in. This means we must call Backend.Run
+    // before http server start serving. Otherwise the Backend.ProcessEvents call might block.
+    if s.AuditBackend != nil {
+        if err := s.AuditBackend.Run(auditStopCh); err != nil {
+            return fmt.Errorf("failed to run the audit backend: %v", err)
+        }
+    }
 
-	// Use an internal stop channel to allow cleanup of the listeners on error.
-	internalStopCh := make(chan struct{})
-	var stoppedCh <-chan struct{}
-	if s.SecureServingInfo != nil && s.Handler != nil {
-		var err error
-		stoppedCh, err = s.SecureServingInfo.Serve(s.Handler, s.ShutdownTimeout, internalStopCh)
-		if err != nil {
-			close(internalStopCh)
-			close(auditStopCh)
-			return err
-		}
-	}
+    // Use an internal stop channel to allow cleanup of the listeners on error.
+    internalStopCh := make(chan struct{})
+    var stoppedCh <-chan struct{}
+    if s.SecureServingInfo != nil && s.Handler != nil {
+        var err error
+        stoppedCh, err = s.SecureServingInfo.Serve(s.Handler, s.ShutdownTimeout, internalStopCh)
+        if err != nil {
+            close(internalStopCh)
+            close(auditStopCh)
+            return err
+        }
+    }
 
-	// Now that listener have bound successfully, it is the
-	// responsibility of the caller to close the provided channel to
-	// ensure cleanup.
-	go func() {
-		<-stopCh
-		close(internalStopCh)
-		if stoppedCh != nil {
-			<-stoppedCh
-		}
-		s.HandlerChainWaitGroup.Wait()
-		close(auditStopCh)
-	}()
+    // Now that listener have bound successfully, it is the
+    // responsibility of the caller to close the provided channel to
+    // ensure cleanup.
+    go func() {
+        <-stopCh
+        close(internalStopCh)
+        if stoppedCh != nil {
+            <-stoppedCh
+        }
+        s.HandlerChainWaitGroup.Wait()
+        close(auditStopCh)
+    }()
 
-	s.RunPostStartHooks(stopCh)
+    s.RunPostStartHooks(stopCh)
 
-	if _, err := systemd.SdNotify(true, "READY=1\n"); err != nil {
-		klog.Errorf("Unable to send systemd daemon successful start message: %v\n", err)
-	}
+    if _, err := systemd.SdNotify(true, "READY=1\n"); err != nil {
+        klog.Errorf("Unable to send systemd daemon successful start message: %v\n", err)
+    }
 
-	return nil
+    return nil
 }
 ```
 
-```
+```go
 stoppedCh, err = s.SecureServingInfo.Serve(s.Handler, s.ShutdownTimeout, internalStopCh)
 ```
 
 preparedGenericAPIServer.SecureServingInfo 类型为*SecureServingInfo
+
+> k8s.io/apiserver/pkg/server/config.go
+
+```go
+type SecureServingInfo struct {
+	// Listener is the secure server network listener.
+	Listener net.Listener
+
+	// Cert is the main server cert which is used if SNI does not match. Cert must be non-nil and is
+	// allowed to be in SNICerts.
+	Cert dynamiccertificates.CertKeyContentProvider
+
+	// SNICerts are the TLS certificates used for SNI.
+	SNICerts []dynamiccertificates.SNICertKeyContentProvider
+
+	// ClientCA is the certificate bundle for all the signers that you'll recognize for incoming client certificates
+	ClientCA dynamiccertificates.CAContentProvider
+
+	// MinTLSVersion optionally overrides the minimum TLS version supported.
+	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	MinTLSVersion uint16
+
+	// CipherSuites optionally overrides the list of allowed cipher suites for the server.
+	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	CipherSuites []uint16
+
+	// HTTP2MaxStreamsPerConnection is the limit that the api server imposes on each client.
+	// A value of zero means to use the default provided by golang's HTTP/2 support.
+	HTTP2MaxStreamsPerConnection int
+
+	// DisableHTTP2 indicates that http2 should not be enabled.
+	DisableHTTP2 bool
+}
+```
+
+> k8s.io/apiserver/pkg/server/secure_serving.go
+
+```go
+// Serve runs the secure http server. It fails only if certificates cannot be loaded or the initial listen call fails.
+// The actual server loop (stoppable by closing stopCh) runs in a go routine, i.e. Serve does not block.
+// It returns a stoppedCh that is closed when all non-hijacked active requests have been processed.
+func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Duration, stopCh <-chan struct{}) (<-chan struct{}, error) {
+	if s.Listener == nil {
+		return nil, fmt.Errorf("listener must not be nil")
+	}
+
+	tlsConfig, err := s.tlsConfig(stopCh)
+	if err != nil {
+		return nil, err
+	}
+
+	secureServer := &http.Server{
+		Addr:           s.Listener.Addr().String(),
+		Handler:        handler,
+		MaxHeaderBytes: 1 << 20,
+		TLSConfig:      tlsConfig,
+	}
+
+	// At least 99% of serialized resources in surveyed clusters were smaller than 256kb.
+	// This should be big enough to accommodate most API POST requests in a single frame,
+	// and small enough to allow a per connection buffer of this size multiplied by `MaxConcurrentStreams`.
+	const resourceBody99Percentile = 256 * 1024
+
+	http2Options := &http2.Server{}
+
+	// shrink the per-stream buffer and max framesize from the 1MB default while still accommodating most API POST requests in a single frame
+	http2Options.MaxUploadBufferPerStream = resourceBody99Percentile
+	http2Options.MaxReadFrameSize = resourceBody99Percentile
+
+	// use the overridden concurrent streams setting or make the default of 250 explicit so we can size MaxUploadBufferPerConnection appropriately
+	if s.HTTP2MaxStreamsPerConnection > 0 {
+		http2Options.MaxConcurrentStreams = uint32(s.HTTP2MaxStreamsPerConnection)
+	} else {
+		http2Options.MaxConcurrentStreams = 250
+	}
+
+	// increase the connection buffer size from the 1MB default to handle the specified number of concurrent streams
+	http2Options.MaxUploadBufferPerConnection = http2Options.MaxUploadBufferPerStream * int32(http2Options.MaxConcurrentStreams)
+
+	if !s.DisableHTTP2 {
+		// apply settings to the server
+		if err := http2.ConfigureServer(secureServer, http2Options); err != nil {
+			return nil, fmt.Errorf("error configuring http2: %v", err)
+		}
+	}
+
+	klog.Infof("Serving securely on %s", secureServer.Addr)
+	return RunServer(secureServer, s.Listener, shutdownTimeout, stopCh)
+}
+```
