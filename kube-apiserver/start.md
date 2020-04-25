@@ -6,7 +6,7 @@
 
 > cmd/kube-apiserver/apiserver.go
 
-```
+```go
 func main() {
     rand.Seed(time.Now().UnixNano())
 
@@ -29,13 +29,13 @@ func main() {
 
 #### command的创建
 
-```
+```go
 command := app.NewAPIServerCommand()
 ```
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
-```
+```go
 // NewAPIServerCommand creates a *cobra.Command object with default parameters
 func NewAPIServerCommand() *cobra.Command {
     s := options.NewServerRunOptions()
@@ -95,7 +95,7 @@ app.NewAPIServerCommand()是干嘛的呢？
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/options/options.go
 
-```
+```go
 // ServerRunOptions runs a kubernetes api server.
 type ServerRunOptions struct {
     GenericServerRunOptions *genericoptions.ServerRunOptions
@@ -144,7 +144,7 @@ type ServerRunOptions struct {
 }
 ```
 
-```
+```go
 // NewServerRunOptions creates a new ServerRunOptions object with default parameters
 func NewServerRunOptions() *ServerRunOptions {
     s := ServerRunOptions{
@@ -197,7 +197,7 @@ options.NewServerRunOptions比较简单，只是用默认参数创建了一个�
 
 ##### 然后，通过complete函数设置apiserver默认运行参数，名为completedOptions；
 
-```
+```go
 completedOptions, err := Complete(s)
 ```
 
@@ -209,14 +209,14 @@ completedServerRunOptions及Complete函数定义如下
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
-```
+```go
 // completedServerRunOptions is a private wrapper that enforces a call of Complete() before Run can be invoked.
 type completedServerRunOptions struct {
     *options.ServerRunOptions
 }
 ```
 
-```
+```go
 // Complete set default ServerRunOptions.
 // Should be called after kube-apiserver flags parsed.
 func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
@@ -327,7 +327,7 @@ func Complete(s *options.ServerRunOptions) (completedServerRunOptions, error) {
 
 ##### 最后，返回run函数，run函数加载completedOptions及genericapiserver.SetupSignalHandler()参数。run函数即为**command**主体，为Execute的对象；
 
-```
+```go
 return Run(completedOptions, genericapiserver.SetupSignalHandler())
 ```
 
@@ -335,7 +335,7 @@ return Run(completedOptions, genericapiserver.SetupSignalHandler())
 
 > k8s.io/apiserver/pkg/server/signal.go
 
-```
+```go
 // SetupSignalHandler registered for SIGTERM and SIGINT. A stop channel is returned
 // which is closed on one of these signals. If a second signal is caught, the program
 // is terminated with exit code 1.
@@ -363,7 +363,7 @@ func SetupSignalHandler() <-chan struct{} {
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
-```
+```go
 // Run runs the specified APIServer. This should never exit.
 func Run(completeOptions completedServerRunOptions, stopCh <-chan struct{}) error {
  // To help debugging, immediately log version
@@ -382,7 +382,7 @@ return prepared.Run(stopCh)
 
 **首先调用CreateServerChain函数，该函数目的是生成server结构体，类型为APIAggregator。**
 
-```
+```go
 server, err := CreateServerChain(completeOptions, stopCh)
 ```
 
@@ -390,7 +390,7 @@ CreateServerChain函数定义为
 
 > k8s.io/kubernetes/cmd/kube-apiserver/app/server.go
 
-```
+```go
 // CreateServerChain creates the apiservers connected via delegation.
 func CreateServerChain(completedOptions completedServerRunOptions, stopCh <-chan struct{}) (*aggregatorapiserver.APIAggregator, error) {
     nodeTunneler, proxyTransport, err := CreateNodeDialer(completedOptions)
@@ -445,7 +445,7 @@ APIAggregator定义为
 
 > k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
-```
+```go
 // APIAggregator contains state for a Kubernetes cluster master/api server.
 type APIAggregator struct {
     GenericAPIServer *genericapiserver.GenericAPIServer
@@ -487,13 +487,13 @@ type APIAggregator struct {
 
 **生成server（APIAggregator类型）后，调用PrepareRun（)方法生成preparedAPIAggregator**
 
-```
+```go
 prepared, err := server.PrepareRun()
 ```
 
 > k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
-```
+```go
 // PrepareRun prepares the aggregator to run, by setting up the OpenAPI spec and calling
 // the generic PrepareRun.
 func (s *APIAggregator) PrepareRun() (preparedAPIAggregator, error) {
@@ -530,7 +530,7 @@ preparedAPIAggregator定义为
 
 > k8s.io/kube-aggregator/pkg/apiserver/apiserver.go
 
-```
+```go
 // preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
 type preparedAPIAggregator struct {
     *APIAggregator
@@ -538,7 +538,7 @@ type preparedAPIAggregator struct {
 }
 ```
 
-```
+```go
 type runnable interface {
     Run(stopCh <-chan struct{}) error
 }
@@ -549,11 +549,11 @@ preparedAPIAggregator实际上是在APIAggregator基础上，包装了runable类
 
 preparedAPIAggregator具体是怎么生成的呢，查看APIAggregator的PrepareRun()方法发现有如下两句
 
-```
+```go
 prepared := s.GenericAPIServer.PrepareRun()
 ```
 
-```
+```go
 return preparedAPIAggregator{APIAggregator: s, runnable: prepared}, nil
 ```
 
@@ -563,7 +563,7 @@ GenericAPIServer及PrepareRun方法定义为
 
 > k8s.io/apiserver/pkg/server/genericapiserver.go
 
-```
+```go
 // GenericAPIServer contains state for a Kubernetes cluster api server.
 type GenericAPIServer struct {
     // discoveryAddresses is used to build cluster IPs for discovery.
@@ -681,7 +681,7 @@ type GenericAPIServer struct {
 }
 ```
 
-```
+```go
 // PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
 func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
     s.delegationTarget.PrepareRun()
@@ -715,7 +715,7 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 }
 ```
 
-```
+```go
 // preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
 type preparedGenericAPIServer struct {
     *GenericAPIServer
@@ -726,13 +726,13 @@ type preparedGenericAPIServer struct {
 
 **preparedAPIAggregator生成后，调用preparedAPIAggregator的Run()方法**
 
-```
+```go
 return prepared.Run(stopCh)
 ```
 
 > k8s.io/apiserver/pkg/server/genericapiserver.go
 
-```
+```go
 func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
     return s.runnable.Run(stopCh)
 }
@@ -742,7 +742,7 @@ func (s preparedAPIAggregator) Run(stopCh <-chan struct{}) error {
 
 > k8s.io/apiserver/pkg/server/genericapiserver.go
 
-```
+```go
 // Run spawns the secure http server. It only returns if stopCh is closed
 // or the secure port cannot be listened on initially.
 func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
@@ -801,7 +801,7 @@ func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
 
 主要是调用preparedGenericAPIServer 的NonBlockingRun方法
 
-```
+```go
 err := s.NonBlockingRun(delayedStopCh)
 ```
 
