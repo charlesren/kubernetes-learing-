@@ -954,3 +954,56 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 	return RunServer(secureServer, s.Listener, shutdownTimeout, stopCh)
 }
 ```
+
+
+
+```go
+// RunServer spawns a go-routine continuously serving until the stopCh is
+// closed.
+// It returns a stoppedCh that is closed when all non-hijacked active requests
+// have been processed.
+// This function does not block
+// TODO: make private when insecure serving is gone from the kube-apiserver
+func RunServer(
+	server *http.Server,
+	ln net.Listener,
+	shutDownTimeout time.Duration,
+	stopCh <-chan struct{},
+) (<-chan struct{}, error) {
+	if ln == nil {
+		return nil, fmt.Errorf("listener must not be nil")
+	}
+
+	// Shutdown server gracefully.
+	stoppedCh := make(chan struct{})
+	go func() {
+		defer close(stoppedCh)
+		<-stopCh
+		ctx, cancel := context.WithTimeout(context.Background(), shutDownTimeout)
+		server.Shutdown(ctx)
+		cancel()
+	}()
+
+	go func() {
+		defer utilruntime.HandleCrash()
+
+		var listener net.Listener
+		listener = tcpKeepAliveListener{ln.(*net.TCPListener)}
+		if server.TLSConfig != nil {
+			listener = tls.NewListener(listener, server.TLSConfig)
+		}
+
+		err := server.Serve(listener)
+
+		msg := fmt.Sprintf("Stopped listening on %s", ln.Addr().String())
+		select {
+		case <-stopCh:
+			klog.Info(msg)
+		default:
+			panic(fmt.Sprintf("%s due to error: %v", msg, err))
+		}
+	}()
+
+	return stoppedCh, nil
+}
+```
