@@ -1,0 +1,1 @@
+[深入剖析kubernetes的API对象类型定义](https://blog.csdn.net/weixin_42663840/article/details/102558455)
