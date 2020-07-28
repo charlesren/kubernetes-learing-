@@ -38,6 +38,8 @@
 
 - [在不生成 crd client 代码的情况下通过 client-go 增删改查 k8s crd 资源](https://www.tuicool.com/articles/Uv6Jvu7)
 
+   https://www.martin-helmich.de/en/blog/kubernetes-crd-client.html
+
 - [使用client-go包访问Kubernetes CRD](https://segmentfault.com/a/1190000020437031?utm_source=tag-newest)
 
 - [Using Client-Go's dynamic client to operate namespaced CRDs](https://soggy.space/namespaced-crds-dynamic-client/)
