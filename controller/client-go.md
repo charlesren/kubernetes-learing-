@@ -24,3 +24,20 @@
 
 <https://www.bookstack.cn/read/huweihuang-kubernetes-notes/code-analysis-kube-controller-manager-sharedIndexInformer.md>
 
+#### client-go client
+
+- [Kubernetes三种Client的使用示例](https://blog.csdn.net/weiyuanke/article/details/97938690)
+
+- [使用client-go 进行k8s相关操作-clientset（一)](https://blog.csdn.net/yevvzi/article/details/52768288)
+
+- [使用client-go 进行k8s相关操作-dynamicclient（二)](https://blog.csdn.net/yevvzi/article/details/54380944)
+
+- [使用client-go 进行k8s相关操作-restclient（三)](https://blog.csdn.net/yevvzi/article/details/54426775)
+
+- [Dynamic Kubernetes Informers](https://www.firehydrant.io/blog/dynamic-kubernetes-informers/)
+
+- [在不生成 crd client 代码的情况下通过 client-go 增删改查 k8s crd 资源](https://www.tuicool.com/articles/Uv6Jvu7)
+
+- [使用client-go包访问Kubernetes CRD](https://segmentfault.com/a/1190000020437031?utm_source=tag-newest)
+
+- [Using Client-Go's dynamic client to operate namespaced CRDs](https://soggy.space/namespaced-crds-dynamic-client/)
