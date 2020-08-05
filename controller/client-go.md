@@ -32,6 +32,4 @@
 
    https://www.martin-helmich.de/en/blog/kubernetes-crd-client.html
 
-- [使用client-go包访问Kubernetes CRD](https://segmentfault.com/a/1190000020437031?utm_source=tag-newest)
-
 - [Using Client-Go's dynamic client to operate namespaced CRDs](https://soggy.space/namespaced-crds-dynamic-client/)
